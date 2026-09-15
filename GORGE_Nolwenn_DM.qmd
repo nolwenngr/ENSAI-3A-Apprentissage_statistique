@@ -1,0 +1,170 @@
+---
+title: "GORGE_Nolwenn_DM"
+format: html
+---
+
+Question 1
+
+On tire d’abord des zones, puis on tire 1000 individus dans ces zones, en stratifiant par sexe. Pour que ce soit un plan à deux degrés, il faut que le tirage des individus soit organisé à l’intérieur des zones sélectionnées.
+
+Le plan devient un plan à deux degrés si, au second degré, on tire les individus séparément dans chaque zone sélectionnée.
+
+Dans ce cas, les strates du second degré sont définies par le croisement :
+zone d'enquête x sexe.
+
+Question 2
+
+L'allocation est proportionnelle.
+```{r}
+individus <- readRDS("individus.rds")
+
+library(dplyr)
+
+zones <- individus %>%
+  distinct(ze, type)
+
+alloc_ze <- zones %>%
+  count(type, name = "M_h") %>%
+  mutate(
+    M = sum(M_h),
+    m_h = round(50 * M_h / M)
+  )
+
+alloc_ze
+```
+
+Puis on tire dans les zones.
+```{r}
+set.seed(1)
+
+ech_zones <- zones %>%
+  left_join(alloc_ze, by = "type") %>%
+  group_by(type) %>%
+  group_modify(~ slice_sample(.x, n = as.integer(unique(.x$m_h)))) %>%
+  ungroup()
+
+ech_zones
+```
+
+```{r}
+base_zones_tirees <- individus %>%
+  semi_join(ech_zones, by = "ze")
+```
+
+Question 3
+```{r}
+alloc_ind <- base_zones_tirees %>%
+  count(ze, sexe, name = "N_is") %>%
+  mutate(
+    N_total = sum(N_is),
+    n_is = round(1000 * N_is / N_total)
+  )
+
+alloc_ind
+```
+
+On tire les individus.
+```{r}
+ech_individus <- base_zones_tirees %>%
+  left_join(alloc_ind, by = c("ze", "sexe")) %>%
+  group_by(ze, sexe) %>%
+  group_modify(~ {
+    n_tirage <- as.integer(unique(.x$n_is))
+    if (n_tirage == 0) {
+      .x[0, ]
+    } else {
+      slice_sample(.x, n = n_tirage)
+    }
+  }) %>%
+  ungroup() %>%
+  left_join(alloc_ze, by = "type") %>%
+  mutate(
+    pi_1 = m_h / M_h,
+    pi_2 = n_is / N_is,
+    pi = pi_1 * pi_2,
+    poids = 1 / pi
+  )
+
+ech_individus
+```
+
+Question 4
+
+Le plan ne vérifie pas la propriété d’invariance, car le tirage des individus dépend du tirage préalable des zones.
+
+Question 5
+
+Première description : plan à deux degrés. Elle permet une estimation plus fidèle de la variance, car elle tient compte de la structure en zones.
+```{r}
+library(survey)
+
+design_2d <- svydesign(
+  ids = ~ze + individu,
+  strata = ~type + interaction(ze, sexe),
+  fpc = ~M_h + N_is,
+  data = ech_individus,
+  nest = TRUE
+)
+```
+
+Deuxième description :
+On peut aussi décrire uniquement l’échantillon final d’individus. Elle donne en général les mêmes estimations de moyennes ou de totaux si les poids sont correctement calculés, mais les variances peuvent être différentes, car on ne tient plus compte de la structure à deux degrés.
+```{r}
+design_ind <- svydesign(
+  ids = ~1,
+  strata = ~sexe,
+  weights = ~poids,
+  data = ech_individus
+)
+```
+
+Question 6
+
+Description 1
+```{r}
+design_2d <- svydesign(
+  ids = ~ze + individu,
+  strata = ~type + interaction(ze, sexe),
+  weights = ~poids,
+  data = ech_individus,
+  nest = TRUE
+)
+
+svyby(
+  ~revenu,
+  ~sexe,
+  design_2d,
+  svymean,
+  vartype = c("se", "var")
+)
+```
+
+Description 2
+```{r}
+design_ind <- svydesign(
+  ids = ~1,
+  strata = ~sexe,
+  weights = ~poids,
+  data = ech_individus
+)
+
+svyby(
+  ~revenu,
+  ~sexe,
+  design_ind,
+  svymean,
+  vartype = c("se", "var")
+)
+```
+
+Les moyennes estimées sont identiques dans les deux descriptions mais les variances estimées sont différentes. 
+
+Les deux descriptions donnent les mêmes estimations ponctuelles du revenu moyen par sexe, car elles utilisent le même échantillon final d’individus et les mêmes poids de sondage.
+En revanche, les estimations de variance diffèrent. La description à deux degrés tient compte du tirage des zones d’enquête au premier degré, puis du tirage des individus au second degré. Elle intègre donc la structure du plan de sondage.
+La description simplifiée au niveau individuel ne tient pas compte de la structure en zones. Elle considère les individus comme s’ils avaient été tirés directement. Cela conduit ici à des variances plus faibles.
+
+Question 7
+
+La méthode approchée conduit ici à une sous-estimation de la variance. En effet, les variances obtenues avec la description simplifiée sont inférieures à celles obtenues avec la description complète à deux degrés.
+Pour les hommes, la variance passe de 43640,00 avec le plan à deux degrés à 28171,08 avec le plan simplifié. Pour les femmes, elle passe de 32713,97 à 19230,57.
+La méthode approchée sous-estime donc la variance, car elle ignore une partie de la structure du plan de sondage, en particulier l’effet lié au tirage des zones au premier degré.
