@@ -39,6 +39,7 @@ escap <- escap %>%
 ```
 
 
+# Statistiques descriptives pour repérer les NA
 ```{r}
 variables_a_tracer <- setdiff(names(escap), c("id", "poids"))
 
@@ -85,11 +86,29 @@ for (var in variables_a_tracer) {
   print(p)
 }
 ```
+Nous remarquons que des personnes n'ont pas répondu à la variable Situation mais on répondu à Situation scolaire. De plus, les NA de la variable Situation professionnelle ne sont pas des vais NA, mais des personnes non concernées. Nous allons croiser les 3 variables et créer une nouvelle modalité de Situation professionnelle afin de réduire les NA.
 
 ```{r}
+# Si Situation est NA et Situation scolaire est renseignée : Situation devient 1
+escap <- escap %>%
+  mutate(
+    situation = case_when(
+      is.na(situation) & !is.na(situation_scolaire) ~ 1,
+      TRUE ~ situation
+    )
+  )
 
+# Si la Situation pro est NA mais Situation est renseignée : création d'une nouvelle catégorie 5
+escap <- escap %>%
+  mutate(
+    situation_pro = case_when(
+      situation == 1 & is.na(situation_pro) ~ 5,
+      TRUE ~ situation_pro
+    )
+  )
 ```
 
+# Imputation 
 ```{r}
 
 ```
