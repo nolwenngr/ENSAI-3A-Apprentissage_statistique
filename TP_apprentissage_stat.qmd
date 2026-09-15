@@ -1,10 +1,89 @@
 ---
-title: "GORGE_Nolwenn_DM"
+title: "tp"
 format: pdf
+editor: visual
 ---
 
-```{r}
 
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+escap <- read.csv2("ESCAP.csv")
+```
+# Renommer les variables
+
+```{r}
+escap <- escap %>%
+  rename(
+    id = A01,
+    sexe = Q03,
+    situation = Q04,
+    situation_scolaire = Q04A,
+    situation_pro = Q04B,
+    redoublement = Q05,
+    difficultes_lire = Q06A,
+    difficultes_ecrire = Q06B,
+    lieu_vie = Q08,
+    vie_parents = Q08C,
+    situation_pere = Q09A1,
+    situation_mere = Q09B1,
+    pcs_pere = Q10A1,
+    pcs_mere = Q10B1,
+    pere_boit_alcool_maison = B08A,
+    mere_boit_alcool_maison = B08B,
+    poids = pm17B,
+    Y = Q19A
+  )
+```
+
+
+```{r}
+variables_a_tracer <- setdiff(names(escap), c("id", "poids"))
+
+for (var in variables_a_tracer) {
+
+  donnees_graph <- escap %>%
+    mutate(
+      modalite = as.character(.data[[var]]),
+      modalite = ifelse(is.na(modalite), "NA", modalite)
+    ) %>%
+    count(modalite, name = "n") %>%
+    mutate(
+      pct = 100 * n / sum(n),
+      label = paste0(round(pct, 1), " %")
+    )
+
+  p <- ggplot(donnees_graph, aes(x = modalite, y = pct)) +
+    geom_col() +
+    geom_text(
+      aes(label = label),
+      vjust = -0.4,
+      size = 4
+    ) +
+    labs(
+      title = var,
+      x = NULL,
+      y = "Pourcentage"
+    ) +
+    expand_limits(
+      y = max(donnees_graph$pct) * 1.12
+    ) +
+    theme_minimal(base_size = 14) +
+    theme(
+      plot.title = element_text(
+        size = 16,
+        face = "bold"
+      ),
+      axis.text.x = element_text(
+        angle = 45,
+        hjust = 1
+      )
+    )
+
+  print(p)
+}
 ```
 
 ```{r}
@@ -15,7 +94,6 @@ format: pdf
 
 ```
 
-
 ```{r}
 
 ```
@@ -24,11 +102,3 @@ format: pdf
 
 ```
 
-
-```{r}
-
-```
-
-```{r}
-
-```
