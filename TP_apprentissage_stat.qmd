@@ -10,6 +10,9 @@ library(dplyr)
 library(tidyr)
 library(ggplot2)
 library(classInt)
+library(missMDA)
+
+set.seed(67)
 
 escap <- read.csv2("ESCAP.csv")
 ```
@@ -109,7 +112,7 @@ escap <- escap %>%
   )
 ```
 
-## Discrétisation de la variable Y
+# Discrétisation de la variable Y
 
 ```{r}
 str(escap$Y)
@@ -152,13 +155,58 @@ breaks
 
 # Imputation 
 ```{r}
+# Transfomation en facteurs
+escap_mca <- escap %>%
+  select(-id, -poids) %>%
+  mutate(
+    across(
+      everything(),
+      as.factor
+    )
+  )
 
+# Choix du nombre de dimensions de l'ACM sur un échantillon car beaucoup trop long sinon
+escap_test <- escap_mca %>%
+  slice_sample(
+    n = min(1000, nrow(escap_mca))
+  )
+
+resultat_test_mca <- estim_ncpMCA(
+  escap_test,
+  ncp.max = 6
+)
+
+resultat_test_mca$ncp
 ```
-
+L'algorithme choisi 5 dimensions.
 ```{r}
+imputation_mca <- imputeMCA(
+  escap_mca,
+  ncp = 5,
+  method = "Regularized"
+)
 
+escap_impute <- imputation_mca$completeObs
+colSums(is.na(escap_impute))
 ```
-
+On peut regarder la distribution des variables qui avaient le plus de NA pour véréfier qu'il n'y ait pas d'aberrations.
 ```{r}
+prop.table(table(escap_mca$pere_boit_alcool_maison, useNA = "ifany")) * 100
+prop.table(table(escap_impute$pere_boit_alcool_maison, useNA = "ifany")) * 100
 
+prop.table(table(escap_mca$mere_boit_alcool_maison, useNA = "ifany")) * 100
+prop.table(table(escap_impute$mere_boit_alcool_maison, useNA = "ifany")) * 100
+
+prop.table(table(escap_mca$pcs_mere, useNA = "ifany")) * 100
+prop.table(table(escap_impute$pcs_mere, useNA = "ifany")) * 100
+
+prop.table(table(escap_mca$pcs_pere, useNA = "ifany")) * 100
+prop.table(table(escap_impute$pcs_pere, useNA = "ifany")) * 100
+```
+Construction du nouveau jeu de données
+```{r}
+escap_final <- bind_cols(
+  escap %>% select(id, poids),
+  escap_impute
+)
 ```
