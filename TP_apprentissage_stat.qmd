@@ -90,7 +90,7 @@ for (var in variables_a_tracer) {
   print(p)
 }
 ```
-Nous remarquons que des personnes n'ont pas répondu à la variable Situation mais on répondu à Situation scolaire. De plus, les NA de la variable Situation professionnelle ne sont pas des vais NA, mais des personnes non concernées. Nous allons croiser les 3 variables et créer une nouvelle modalité de Situation professionnelle afin de réduire les NA.
+Nous remarquons que des personnes n'ont pas répondu à la variable Situation mais on répondu à Situation scolaire. De plus, les NA de la variable Situation professionnelle ne sont pas des vaies NA, mais des personnes non concernées. Nous allons croiser les 3 variables et créer une nouvelle modalité de Situation professionnelle afin de réduire les NA.
 
 ```{r}
 # Si Situation est NA et Situation scolaire est renseignée : Situation devient 1
@@ -114,43 +114,45 @@ escap <- escap %>%
 
 # Discrétisation de la variable Y
 
-```{r}
-str(escap$Y)
+On obtient d'abord une première idée de la distribution de Y par des statistiques descriptives.
 
-summary(escap$Y)
+```{r}
+Y <- escap$Q19A
+
+str(Y)
+
+summary(Y)
+```
+
+Diagramme à barres
+```{r}
+barplot(table(Y, useNA = "no"),
+        main = "Âge au premier alcool",
+        xlab = "Âge",
+        ylab = "Effectif")
 ```
 
 
-
+Les premiers âges sont très concentrés autour des 14 à 16 ans. Afin de ne pas avoir de classes trop "déséquilibrées", on choisit donc de découper Y en les 4 classes suivantes :
 ```{r}
-boxplot(escap$Y, ylim = range(0, 35))
+Y <- cut(Y,
+         breaks = c(-Inf, 12, 14, 16, Inf),
+         labels = c("<=12",
+                   "13-14",
+                   "15-16",
+                   ">=17"))
+
+# Les valeurs manquantes sont interprétées comme des personnes non concernées.
+Y <- as.character(Y)
+Y[is.na(Y)] <- "Non_concerne"
+Y <- factor(Y,
+            levels = c("<=12", "13-14", "15-16",
+                       ">=17", "Non_concerne"))
+
+table(Y)
 ```
 
-```{r}
-h <- hist(escap$Y, plot = FALSE)
 
-pourcentages <- h$counts / sum(h$counts) * 100
-
-hist(escap$Y,
-     main = "Histogramme de Y",
-     xlab = "Y",
-     ylab = "Fréquence",
-     col = "lightgray")
-
-text(h$mids, h$counts,
-     labels = paste0(round(pourcentages, 1), "%"),
-     pos = 3)
-```
-
-```{r}
-Y_sans_na <- Y[!is.na(Y)]
-
-jenks_breaks <- classIntervals(Y_sans_na, n = 3, style = "jenks")
-# Obtenir les points de coupure
-breaks <- jenks_breaks$brks
-breaks
-"14-15"
-```
 
 
 # Imputation 
@@ -189,7 +191,7 @@ imputation_mca <- imputeMCA(
 escap_impute <- imputation_mca$completeObs
 colSums(is.na(escap_impute))
 ```
-On peut regarder la distribution des variables qui avaient le plus de NA pour véréfier qu'il n'y ait pas d'aberrations.
+On peut regarder la distribution des variables qui avaient le plus de NA pour vérifier qu'il n'y ait pas d'aberrations.
 ```{r}
 prop.table(table(escap_mca$pere_boit_alcool_maison, useNA = "ifany")) * 100
 prop.table(table(escap_impute$pere_boit_alcool_maison, useNA = "ifany")) * 100
