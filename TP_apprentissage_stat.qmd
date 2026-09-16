@@ -9,6 +9,7 @@ editor: visual
 library(dplyr)
 library(tidyr)
 library(ggplot2)
+library(classInt)
 
 escap <- read.csv2("ESCAP.csv")
 ```
@@ -108,6 +109,47 @@ escap <- escap %>%
   )
 ```
 
+## Discrétisation de la variable Y
+
+```{r}
+str(escap$Y)
+
+summary(escap$Y)
+```
+
+
+
+```{r}
+boxplot(escap$Y, ylim = range(0, 35))
+```
+
+```{r}
+h <- hist(escap$Y, plot = FALSE)
+
+pourcentages <- h$counts / sum(h$counts) * 100
+
+hist(escap$Y,
+     main = "Histogramme de Y",
+     xlab = "Y",
+     ylab = "Fréquence",
+     col = "lightgray")
+
+text(h$mids, h$counts,
+     labels = paste0(round(pourcentages, 1), "%"),
+     pos = 3)
+```
+
+```{r}
+Y_sans_na <- Y[!is.na(Y)]
+
+jenks_breaks <- classIntervals(Y_sans_na, n = 3, style = "jenks")
+# Obtenir les points de coupure
+breaks <- jenks_breaks$brks
+breaks
+"14-15"
+```
+
+
 # Imputation 
 ```{r}
 
@@ -120,50 +162,3 @@ escap <- escap %>%
 ```{r}
 
 ```
-
-
-
-
-## Discrétisation de la variable Y
-
-```{r}
-str(Y)
-
-summary(Y)
-```
-
-
-
-```{r}
-boxplot(Y, ylim = range(0, 35))
-```
-
-```{r}
-h <- hist(Y, plot = FALSE)
-
-pourcentages <- h$counts / sum(h$counts) * 100
-
-hist(Y,
-     main = "Histogramme de Y",
-     xlab = "Y",
-     ylab = "Fréquence",
-     col = "lightgray")
-
-text(h$mids, h$counts,
-     labels = paste0(round(pourcentages, 1), "%"),
-     pos = 3)
-```
-
-```{r}
-library(classInt)
-
-# 
-Y_sans_na <- Y[!is.na(Y)]
-
-jenks_breaks <- classIntervals(Y_sans_na, n = 3, style = "jenks")
-# Obtenir les points de coupure
-breaks <- jenks_breaks$brks
-breaks
-"14-15"
-```
-
