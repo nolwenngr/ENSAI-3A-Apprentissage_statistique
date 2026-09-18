@@ -10,7 +10,6 @@ library(dplyr)
 library(tidyr)
 library(ggplot2)
 library(classInt)
-library(missMDA)
 
 set.seed(67)
 
@@ -117,7 +116,7 @@ escap <- escap %>%
 On obtient d'abord une première idée de la distribution de Y par des statistiques descriptives.
 
 ```{r}
-Y <- escap$Q19A
+Y <- escap$Y
 
 str(Y)
 
@@ -153,62 +152,39 @@ table(Y)
 ```
 
 
-
-
-# Imputation 
+# Imputation par Hot deck aléatoire
 ```{r}
-# Transfomation en facteurs
-escap_mca <- escap %>%
-  select(-id, -poids) %>%
-  mutate(
-    across(
-      everything(),
-      as.factor
+variables_a_imputer <- setdiff(
+  names(escap_hotdeck),
+  c("id", "poids")
+)
+
+for (var in variables_a_imputer) {
+
+  x <- escap[[var]]
+
+  valeurs_observees <- x[!is.na(x)]
+  valeurs_manquantes <- is.na(x)
+
+  if (any(valeurs_manquantes) && length(valeurs_observees) > 0) {
+
+    x[valeurs_manquantes] <- sample(
+      valeurs_observees,
+      size = sum(valeurs_manquantes),
+      replace = TRUE
     )
-  )
 
-# Choix du nombre de dimensions de l'ACM sur un échantillon car beaucoup trop long sinon
-escap_test <- escap_mca %>%
-  slice_sample(
-    n = min(1000, nrow(escap_mca))
-  )
+    escap[[var]] <- x
+  }
+}
 
-resultat_test_mca <- estim_ncpMCA(
-  escap_test,
-  ncp.max = 6
-)
-
-resultat_test_mca$ncp
 ```
-L'algorithme choisi 5 dimensions.
-```{r}
-imputation_mca <- imputeMCA(
-  escap_mca,
-  ncp = 5,
-  method = "Regularized"
-)
 
-escap_impute <- imputation_mca$completeObs
-colSums(is.na(escap_impute))
+Vérification des Na restants
+```{r}
+colSums(is.na(escap))
 ```
-On peut regarder la distribution des variables qui avaient le plus de NA pour vérifier qu'il n'y ait pas d'aberrations.
+
 ```{r}
-prop.table(table(escap_mca$pere_boit_alcool_maison, useNA = "ifany")) * 100
-prop.table(table(escap_impute$pere_boit_alcool_maison, useNA = "ifany")) * 100
 
-prop.table(table(escap_mca$mere_boit_alcool_maison, useNA = "ifany")) * 100
-prop.table(table(escap_impute$mere_boit_alcool_maison, useNA = "ifany")) * 100
-
-prop.table(table(escap_mca$pcs_mere, useNA = "ifany")) * 100
-prop.table(table(escap_impute$pcs_mere, useNA = "ifany")) * 100
-
-prop.table(table(escap_mca$pcs_pere, useNA = "ifany")) * 100
-prop.table(table(escap_impute$pcs_pere, useNA = "ifany")) * 100
-```
-Construction du nouveau jeu de données
-```{r}
-escap_final <- bind_cols(
-  escap %>% select(id, poids),
-  escap_impute
-)
 ```
