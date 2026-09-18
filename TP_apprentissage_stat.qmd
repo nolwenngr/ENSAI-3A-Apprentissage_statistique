@@ -4,7 +4,6 @@ format: pdf
 editor: visual
 ---
 
-
 ```{r}
 library(dplyr)
 library(tidyr)
@@ -15,6 +14,7 @@ set.seed(67)
 
 escap <- read.csv2("ESCAP.csv")
 ```
+
 # Renommer les variables
 
 ```{r}
@@ -41,8 +41,8 @@ escap <- escap %>%
   )
 ```
 
-
 # Statistiques descriptives pour repérer les NA
+
 ```{r}
 variables_a_tracer <- setdiff(names(escap), c("id", "poids"))
 
@@ -89,6 +89,7 @@ for (var in variables_a_tracer) {
   print(p)
 }
 ```
+
 Nous remarquons que des personnes n'ont pas répondu à la variable Situation mais on répondu à Situation scolaire. De plus, les NA de la variable Situation professionnelle ne sont pas des vaies NA, mais des personnes non concernées. Nous allons croiser les 3 variables et créer une nouvelle modalité de Situation professionnelle afin de réduire les NA.
 
 ```{r}
@@ -124,6 +125,7 @@ summary(Y)
 ```
 
 Diagramme à barres
+
 ```{r}
 barplot(table(Y, useNA = "no"),
         main = "Âge au premier alcool",
@@ -131,8 +133,8 @@ barplot(table(Y, useNA = "no"),
         ylab = "Effectif")
 ```
 
-
 Les premiers âges sont très concentrés autour des 14 à 16 ans. Afin de ne pas avoir de classes trop "déséquilibrées", on choisit donc de découper Y en les 4 classes suivantes :
+
 ```{r}
 Y <- cut(Y,
          breaks = c(-Inf, 12, 14, 16, Inf),
@@ -151,11 +153,11 @@ Y <- factor(Y,
 table(Y)
 ```
 
-
 # Imputation par Hot deck aléatoire
+
 ```{r}
 variables_a_imputer <- setdiff(
-  names(escap_hotdeck),
+  names(escap),
   c("id", "poids")
 )
 
@@ -181,9 +183,50 @@ for (var in variables_a_imputer) {
 ```
 
 Vérification des Na restants
+
 ```{r}
 colSums(is.na(escap))
 ```
+
+# Préparation des données pour les modèles
+
+```{r}
+# Variable cible
+Y <- escap$Y
+
+# Variables explicatives
+X <- escap %>%
+  select(-Y, -id, -poids)
+
+# Poids
+poids <- escap$poids
+
+Y <- as.factor(Y)
+
+X <- X %>%
+  mutate(
+    across(everything(), as.factor)
+  )
+
+
+# Découpage stratifié pour test et train
+indices_train <- unlist(
+  lapply(
+    split(seq_len(nrow(escap)), escap$Y),
+    function(ind) {
+      sample(
+        ind,
+        size = floor(0.8 * length(ind))
+      )
+    }
+  )
+)
+
+train <- escap[indices_train, ]
+test  <- escap[-indices_train, ]
+```
+
+# 1. Bagging
 
 ```{r}
 
