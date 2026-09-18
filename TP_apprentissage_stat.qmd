@@ -151,6 +151,8 @@ Y <- factor(Y,
                        ">=17", "Non_concerne"))
 
 table(Y)
+
+escap$Y <- Y
 ```
 
 # Imputation par Hot deck aléatoire
@@ -192,6 +194,8 @@ colSums(is.na(escap))
 
 ```{r}
 # Variable cible
+escap$Y <- as.factor(escap$Y)
+
 Y <- escap$Y
 
 # Variables explicatives
@@ -200,8 +204,6 @@ X <- escap %>%
 
 # Poids
 poids <- escap$poids
-
-Y <- as.factor(Y)
 
 X <- X %>%
   mutate(
@@ -228,6 +230,39 @@ test  <- escap[-indices_train, ]
 
 # 1. Bagging
 
+Entraînement du modèle.
 ```{r}
+library(ipred)
 
+train_bagging <- train %>%
+  select(-id, -poids)
+
+modele_bagging <- bagging(
+  Y ~ .,
+  data = train_bagging,
+  nbagg = 200,
+  coob = TRUE,
+  weights = train$poids
+)
+
+modele_bagging
+```
+Le modèle prédit mal 63% des valeurs.
+
+Test du l'échantillon test.
+```{r}
+test_bagging <- test %>%
+  select(-id, -poids)
+
+pred_bagging <- predict(
+  modele_bagging,
+  newdata = test_bagging
+)
+
+table(
+  Observe = test$Y,
+  Predite = pred_bagging
+)
+
+mean(pred_bagging == test$Y)
 ```
