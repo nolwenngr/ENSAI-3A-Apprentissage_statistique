@@ -249,7 +249,7 @@ modele_bagging
 ```
 Le modèle prédit mal 63% des valeurs.
 
-Test du l'échantillon test.
+Test sur l'échantillon test.
 ```{r}
 test_bagging <- test %>%
   select(-id, -poids)
@@ -259,10 +259,75 @@ pred_bagging <- predict(
   newdata = test_bagging
 )
 
-table(
+accuracy_ponderee <- weighted.mean(
+  pred_bagging == test$Y,
+  w = test$poids
+)
+
+accuracy_ponderee
+
+erreur_ponderee <- weighted.mean(
+  pred_bagging != test$Y,
+  w = test$poids
+)
+
+erreur_ponderee
+
+mat_conf <- table(
   Observe = test$Y,
   Predite = pred_bagging
 )
 
-mean(pred_bagging == test$Y)
+mat_conf
+```
+# 2. Forêt aléatoire
+
+```{r}
+library(randomForest)
+
+train_rf <- train %>%
+  select(-id, -poids)
+
+test_rf <- test %>%
+  select(-id, -poids)
+
+modele_rf <- randomForest(
+  Y ~ .,
+  data = train_rf,
+  ntree = 500,
+  importance = TRUE
+)
+
+modele_rf
+```
+Test sur l'échantillon test. 
+```{r}
+pred_rf <- predict(
+  modele_rf,
+  newdata = test_rf
+)
+
+mat_conf_rf <- table(
+  Observe = test$Y,
+  Predite = pred_rf
+)
+
+mat_conf_rf
+
+accuracy_rf_ponderee <- weighted.mean(
+  pred_rf == test$Y,
+  w = test$poids
+)
+
+accuracy_rf_ponderee
+
+erreur_rf_ponderee <- weighted.mean(
+  pred_rf != test$Y,
+  w = test$poids
+)
+
+erreur_rf_ponderee
+```
+
+```{r}
 ```
