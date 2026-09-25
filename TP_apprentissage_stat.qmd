@@ -118,6 +118,17 @@ escap <- escap %>%
   )
 ```
 
+# Convertir les variables explicatives en factor
+```{r}
+escap <- escap %>%
+  mutate(
+    across(
+      -c(id, poids, Y) & where(is.numeric),
+      as.factor
+    )
+  )
+```
+
 # Discrétisation de la variable Y
 
 On obtient d'abord une première idée de la distribution de Y par des statistiques descriptives.
@@ -160,7 +171,7 @@ variables_a_imputer <- setdiff(
   names(escap),
   c("id", "poids")
 )
-
+set.seed(67)
 for (var in variables_a_imputer) {
 
   x <- escap[[var]]
