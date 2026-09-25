@@ -171,7 +171,7 @@ variables_a_imputer <- setdiff(
   names(escap),
   c("id", "poids")
 )
-set.seed(67)
+
 for (var in variables_a_imputer) {
 
   x <- escap[[var]]
