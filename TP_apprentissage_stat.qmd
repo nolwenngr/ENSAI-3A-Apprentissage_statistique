@@ -145,23 +145,23 @@ table(Y)
 Les premiers âges sont très concentrés autour des 14 à 16 ans. Afin de ne pas avoir de classes trop "déséquilibrées", on choisit donc de découper Y en les 4 classes suivantes :
 
 ```{r}
-Y <- cut(Y,
-         breaks = c(-Inf, 12, 14, 16, Inf),
-         labels = c("<=12",
-                   "13-14",
-                   "15-16",
-                   ">=17"))
-
+escap <- escap %>%
+  mutate(
+    Y = factor(
+      case_when(
+       is.na(Y) ~ "non concerne",
+       Y <= 12 ~ "<=12",
+       Y >= 13 & Y <= 14 ~ "13-14",
+       Y >= 15 & Y <= 16 ~ "15-16",
+       Y >= 17 ~ ">=17"
+      ),
+      levels = c("<=12", "13-14", "15-16", ">=17", "non concerne")
+    )
+  )
 # Les valeurs manquantes sont interprétées comme des personnes non concernées.
-Y <- as.character(Y)
-Y[is.na(Y)] <- "Non_concerne"
-Y <- factor(Y,
-            levels = c("<=12", "13-14", "15-16",
-                       ">=17", "Non_concerne"))
 
+Y <- escap$Y
 table(Y)
-
-escap$Y <- Y
 ```
 
 # Imputation par Hot deck aléatoire
