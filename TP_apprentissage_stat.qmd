@@ -128,17 +128,9 @@ Y <- escap$Y
 str(Y)
 
 summary(Y)
+
+table(Y)
 ```
-
-Diagramme à barres
-
-```{r}
-barplot(table(Y, useNA = "no"),
-        main = "Âge au premier alcool",
-        xlab = "Âge",
-        ylab = "Effectif")
-```
-
 Les premiers âges sont très concentrés autour des 14 à 16 ans. Afin de ne pas avoir de classes trop "déséquilibrées", on choisit donc de découper Y en les 4 classes suivantes :
 
 ```{r}
