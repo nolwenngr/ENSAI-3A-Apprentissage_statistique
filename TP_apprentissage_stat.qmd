@@ -8,6 +8,7 @@ editor: visual
 library(dplyr)
 library(tidyr)
 library(ggplot2)
+library(caret)
 library(classInt)
 library(tidyverse)
 library(xgboost)
@@ -221,23 +222,53 @@ X <- X %>%
 
 
 # Découpage stratifié pour test et train
-indices_train <- unlist(
-  lapply(
-    split(seq_len(nrow(escap)), escap$Y),
-    function(ind) {
-      sample(
-        ind,
-        size = floor(0.8 * length(ind))
-      )
-    }
-  )
-)
+train_index <- createDataPartition(escap$Y, p = 0.7, list = FALSE)
 
-train <- escap[indices_train, ]
-test  <- escap[-indices_train, ]
+train <- escap[train_index, ]
+test  <- escap[-train_index, ]
 ```
 
 # 1. Bagging
+
+Choix du nombre d'arbres par stabilisation de l'erreur OOB
+```{r}
+library(ipred)
+
+valeurs_nbagg <- c(25, 50, 100, 150, 200)
+
+erreurs_oob <- numeric(length(valeurs_nbagg))
+
+for (i in seq_along(valeurs_nbagg)) {
+
+  modele_temp <- bagging(
+    Y ~ .,
+    data = train,
+    nbagg = valeurs_nbagg[i],
+    coob = TRUE,
+    weights = train$poids
+  )
+
+  erreurs_oob[i] <- modele_temp$err
+  print(i)
+}
+
+resultats_nbagg <- data.frame(
+  nbagg = valeurs_nbagg,
+  erreur_oob = erreurs_oob
+)
+
+print(resultats_nbagg)
+
+plot(
+  resultats_nbagg$nbagg,
+  resultats_nbagg$erreur_oob,
+  type = "b",
+  xlab = "Nombre d'arbres",
+  ylab = "Erreur OOB",
+  main = "Stabilisation de l'erreur OOB"
+)
+```
+On va choisir 150 arbres.
 
 Entraînement du modèle.
 ```{r}
@@ -249,7 +280,7 @@ train_bagging <- train %>%
 modele_bagging <- bagging(
   Y ~ .,
   data = train_bagging,
-  nbagg = 200,
+  nbagg = 150,
   coob = TRUE,
   weights = train$poids
 )
@@ -289,8 +320,85 @@ mat_conf <- table(
 
 mat_conf
 ```
+
 # 2. Forêt aléatoire
 
+Choix du nombre d'arbres et de variables explicatives.
+
+```{r}
+library(ranger)
+library(dplyr)
+library(purrr)
+
+# Grille d'hyperparamètres
+tuneGrid <- expand.grid(
+  mtry = c(3, 5, 7),
+  num.trees = seq(50, 300, by = 50)
+)
+
+# Calcul de l'erreur OOB pour chaque combinaison
+results <- tuneGrid %>%
+  mutate(
+    oob_error = map2_dbl(
+      mtry,
+      num.trees,
+      function(m, ntree) {
+
+        model <- ranger(
+          Y ~ .,
+          data = train,
+          mtry = m,
+          num.trees = ntree,
+          importance = "permutation",
+          classification = TRUE,
+          probability = FALSE,
+          oob.error = TRUE,
+          case.weights = train$poids
+        )
+
+        model$prediction.error
+      }
+    )
+  )
+
+results
+
+best_row <- results %>%
+  slice_min(oob_error, n = 1)
+
+best_mtry <- best_row$mtry
+best_ntree <- best_row$num.trees
+best_oob <- best_row$oob_error
+
+cat(
+  "Meilleur modele : mtry =", best_mtry,
+  ", ntree =", best_ntree,
+  ", erreur OOB =", round(best_oob, 4),
+  "\n"
+)
+```
+
+```{r}
+ggplot(
+  results,
+  aes(
+    x = num.trees,
+    y = oob_error,
+    color = as.factor(mtry)
+  )
+) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 2) +
+  labs(
+    title = "Erreur OOB selon le nombre d'arbres et mtry",
+    x = "Nombre d'arbres (num.trees)",
+    y = "Erreur OOB",
+    color = "mtry"
+  ) +
+  theme_minimal()
+```
+
+Entraînement du modèle.
 ```{r}
 library(randomForest)
 
@@ -303,12 +411,15 @@ test_rf <- test %>%
 modele_rf <- randomForest(
   Y ~ .,
   data = train_rf,
-  ntree = 500,
-  importance = TRUE
+  ntree = 250,
+  mtry = 3,
+  importance = TRUE,
+  weights = train$poids
 )
 
 modele_rf
 ```
+
 Test sur l'échantillon test. 
 ```{r}
 pred_rf <- predict(
