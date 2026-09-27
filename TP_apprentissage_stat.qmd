@@ -1,5 +1,8 @@
 ---
-title: "tp"
+title: "DM Apprentissage statistique"
+author:
+  - "Nolwenn Gorgé"
+  - "Karima Jabri"
 format: pdf
 editor: visual
 ---
@@ -8,7 +11,6 @@ editor: visual
 library(dplyr)
 library(tidyr)
 library(ggplot2)
-library(caret)
 library(classInt)
 library(tidyverse)
 library(xgboost)
@@ -17,8 +19,10 @@ library(yardstick)
 library(forcats)
 library(SHAPforxgboost)
 
+# Fixer la graine de reproductible
 set.seed(67)
 
+# Chargement de la table
 escap <- read.csv2("ESCAP.csv")
 ```
 
@@ -120,6 +124,7 @@ escap <- escap %>%
 ```
 
 # Convertir les variables explicatives en factor
+
 ```{r}
 escap <- escap %>%
   mutate(
@@ -143,6 +148,7 @@ summary(Y)
 
 table(Y)
 ```
+
 Les premiers âges sont très concentrés autour des 14 à 16 ans. Afin de ne pas avoir de classes trop "déséquilibrées", on choisit donc de découper Y en les 4 classes suivantes :
 
 ```{r}
@@ -159,20 +165,22 @@ escap <- escap %>%
       levels = c("<=12", "13-14", "15-16", ">=17", "non concerne")
     )
   )
-# Les valeurs manquantes sont interprétées comme des personnes non concernées.
 
+# Les valeurs manquantes sont interprétées comme des personnes non concernées.
 Y <- escap$Y
+
 table(Y)
 ```
 
 # Imputation par Hot deck aléatoire
-On choisit une méthode d'imputation aléatoire pour ne pas casser le lien entre les variables en introduisant un lien artificiel. 
+On choisit une méthode d'imputation aléatoire pour ne pas casser le lien entre les variables et introduire un lien artificiel.
 
 ```{r}
 variables_a_imputer <- setdiff(
   names(escap),
   c("id", "poids")
 )
+
 
 for (var in variables_a_imputer) {
 
@@ -198,8 +206,9 @@ for (var in variables_a_imputer) {
 Vérification des Na restants
 
 ```{r}
-colSums(is.na(escap))
+sum(is.na(escap))
 ```
+
 
 # Préparation des données pour les modèles
 
@@ -229,6 +238,7 @@ train <- escap[train_index, ]
 test  <- escap[-train_index, ]
 ```
 
+
 # 1. Bagging
 
 Choix du nombre d'arbres par stabilisation de l'erreur OOB
@@ -245,8 +255,8 @@ for (i in seq_along(valeurs_nbagg)) {
     Y ~ .,
     data = train,
     nbagg = valeurs_nbagg[i],
-    coob = TRUE,
-    weights = train$poids
+    coob = TRUE
+    #weights = train$poids
   )
 
   erreurs_oob[i] <- modele_temp$err
@@ -282,13 +292,13 @@ modele_bagging <- bagging(
   Y ~ .,
   data = train_bagging,
   nbagg = 150,
-  coob = TRUE,
-  weights = train$poids
+  coob = TRUE
+  #weights = train$poids
 )
 
 modele_bagging
 ```
-Le modèle prédit mal 63% des valeurs.
+Le modèle prédit mal 64% des valeurs.
 
 Test sur l'échantillon test.
 ```{r}
@@ -321,8 +331,13 @@ mat_conf <- table(
 
 mat_conf
 ```
+On voit que le modèle a tendance à prédire la classe majoritaire : 15-16 ans.
+
+
 
 # 2. Forêt aléatoire
+
+# RF avec le package Ranger
 
 Choix du nombre d'arbres et de variables explicatives.
 
@@ -399,9 +414,9 @@ ggplot(
   theme_minimal()
 ```
 
-Entraînement du modèle.
+Entraînement du modèle avec les paramètres optimaux (selon l'erreur OOB).
 ```{r}
-library(randomForest)
+library(ranger)
 
 train_rf <- train %>%
   select(-id, -poids)
@@ -409,46 +424,531 @@ train_rf <- train %>%
 test_rf <- test %>%
   select(-id, -poids)
 
-modele_rf <- randomForest(
-  Y ~ .,
-  data = train_rf,
-  ntree = 250,
-  mtry = 3,
-  importance = TRUE,
-  weights = train$poids
-)
+modele_rf <- ranger(
+              Y ~ .,
+              data = train_rf,
+              mtry = 3,
+              num.trees = 300,
+              case.weights = train$poids,
+              importance = "permutation",
+              classification = TRUE,
+              probability = TRUE)
 
 modele_rf
 ```
 
+Importance des variables
+```{r}
+importance_df <-data.frame(
+Variable = names(modele_rf$variable.importance),
+Importance = modele_rf$variable.importance
+) %>%
+arrange(desc(Importance))
+
+# Les 10 variables les plus importantes
+ggplot(importance_df[1:10, ],
+       aes(x = reorder(Variable, Importance),
+       y = Importance)) +
+       geom_col(fill = "steelblue") +
+       coord_flip() + labs(title = "Importance des variables (permutation)",
+       x = "Variable", y = "Importance") +
+       theme_minimal()
+```
+
 Test sur l'échantillon test. 
 ```{r}
-pred_rf <- predict(
-  modele_rf,
-  newdata = test_rf
+library(caret)
+
+# Prédictions sur échantillon test
+pred_probs <- predict(modele_rf, data = test_rf)$predictions
+
+pred_labels <- colnames(pred_probs)[
+  max.col(pred_probs, ties.method = "first")
+]
+pred_labels <- factor(
+  pred_labels,
+  levels = levels(test_rf$Y)
 )
 
-mat_conf_rf <- table(
-  Observe = test$Y,
-  Predite = pred_rf
+# Matrice de confusion
+confusion <- confusionMatrix(
+  pred_labels,
+  test_rf$Y
+)
+print(confusion)    # On voit que l'échantillon test ne contient aucun age >17
+                    # Donc aucune observation n'est prédite >17
+
+# Matrice de confusion pondérée : 
+test_rf$pred_labels <- pred_labels
+test_rf$poids <- test$poids
+
+confusion_pond <- xtabs(
+  poids ~ Y + pred_labels,
+  data = test_rf
 )
 
-mat_conf_rf
+print(confusion_pond)
+# On voit qu'on a toujours aucune observation dont la classe prédite est ">17".
+# On remarque aussi que de toute manière les poids de sondage influencent très peu la distibution de Y. 
+# On remarque que c'est très souvent la classe d'âge majoritaire qui est prédite pour une observation.
+# On peut penser que ceci a un lien avec la distirbution inégale de Y. Cependant, les modèles ont été lancés avec d'autres découpages de Y offrant une répartition des âges plus équitables entre les classes, mais le même phénomène se produisait : une tendance à prédire davantage la classe majoritaire (à tort).
 
-accuracy_rf_ponderee <- weighted.mean(
-  pred_rf == test$Y,
-  w = test$poids
-)
-
-accuracy_rf_ponderee
-
-erreur_rf_ponderee <- weighted.mean(
-  pred_rf != test$Y,
-  w = test$poids
-)
-
-erreur_rf_ponderee
 ```
+
+
+Courbes ROC (One Versus Rest)
+```{r}
+# Classes de Y
+classes <- levels(test_rf$Y)
+
+# Calcul et affichage des courbes ROC 
+roc_list <- list()
+
+for (cl in classes) {
+  
+  # Classe courante = 1, toutes les autres = 0
+  roc_df <- data.frame(
+    D = ifelse(test_rf$Y == cl, 1, 0),
+    M = pred_probs[, cl]
+  )
+  
+  # Courbe ROC
+  p <- ggplot(roc_df, aes(m = M, d = D)) +
+    geom_roc(
+      color = "darkblue",
+      size = 1.2,
+      n.cuts = 0
+    ) +
+    style_roc() +
+    labs(
+      title = paste("Courbe ROC - classe", cl),
+      x = "1 - Spécificité",
+      y = "Sensibilité"
+    )
+  
+  # Calcul de l'AUC
+  roc_stats <- calc_auc(p)
+  
+  # Stocker
+  roc_list[[cl]] <- list(
+    plot = p,
+    auc = roc_stats
+  )
+  
+  # Afficher
+  print(p)
+  print(roc_stats)
+}
+```
+
+
+
+# 3. XGboost
+
+Séparation train/test
 
 ```{r}
+train_xgboost <- train %>%
+  select(-id, -poids)
+
+test_xgboost <- test %>%
+  select(-id, -poids)
 ```
+
+Matrices pour XGboost
+
+```{r}
+y_train <- as.numeric(train_xgboost$Y) - 1
+y_test  <- as.numeric(test_xgboost$Y) - 1
+
+dtrain_mat <- model.matrix(
+  Y ~ . - 1,
+  data = train_xgboost
+)
+
+dtest_mat <- model.matrix(
+  Y ~ . - 1,
+  data = test_xgboost
+)
+
+dtrain_xgb <- xgb.DMatrix(
+  data = dtrain_mat,
+  label = y_train,
+  weight = train$poids
+)
+dtest_xgb <- xgb.DMatrix(
+  data = dtest_mat,
+  label = y_test,
+  weight = test$poids
+)
+```
+
+Grille de paramètres 
+```{r}
+param_grid <- expand.grid(max_depth = c(3, 5, 7),
+                          nrounds = c(50, 100, 150, 200)
+                       )
+best_acc <-0
+best_model <-NULL
+best_params <-list()
+```
+
+Validation croisée sur ces paramètres
+```{r}
+library(xgboost)
+
+for (i in 1:nrow(param_grid)) {
+    depth <- param_grid$max_depth[i]
+    nround <- param_grid$nrounds[i]
+    
+  cv <- xgb.cv(
+  params = list(
+    objective = "multi:softprob",
+    num_class = 5,
+    max_depth = depth
+  ),
+  data = dtrain_xgb,
+  nrounds = nround,
+  nfold = 5,
+  metrics = list("merror"),
+  stratified = TRUE,
+  verbose = FALSE,
+  early_stopping_rounds = 10
+)
+    acc <- 1 - min(cv$evaluation_log$test_merror_mean)
+    
+    if (acc > best_acc) {
+    best_acc <-acc
+    best_params <-list(nrounds = nround, max_depth = depth)
+    }
+}
+
+  cat("\nMeilleurs hyperparamètres :\n")
+     print(best_params)
+     cat(sprintf("\nAccuracy en validation croisée :
+    %.4f\n", best_acc))
+```
+
+# Entrainement du modèle avec les paramètres optimaux
+```{r}
+x_train <- train_xgboost %>%
+  select(-Y)
+x_test <- test_xgboost %>%
+  select(-Y)
+
+model_xgb <- xgboost(
+  x = x_train,
+  y = train_xgboost$Y,
+  objective = "multi:softprob",
+  max_depth = best_params$max_depth,
+  nrounds = best_params$nrounds,
+  eval_metric = "merror",
+  weights = train$poids,
+  verbosity = 0
+)
+
+model_xgb
+```
+
+Importance des variables
+```{r}
+importance <- xgb.importance(model = model_xgb)
+
+xgb.plot.importance(importance_matrix = importance[1:10,])
+```
+
+Prédictions du modèle sur les données test
+```{r}
+probs <-predict(model_xgb, x_test)
+probs <- matrix(probs, ncol = 5, byrow = TRUE)
+
+# Label prédit
+pred_lab <- factor(
+  levels(test_xgboost$Y)[max.col(probs)],
+  levels = levels(test_xgboost$Y)
+)
+
+# Vrai label
+real_lab <- test_xgboost$Y
+
+# Matrice de confusion
+conf <- table(
+  Prédiction = pred_lab,
+  Réel = real_lab
+)
+conf
+
+# Matrice de confusion pondérée
+conf_pond <- xtabs(
+  test$poids ~ pred_lab + real_lab
+)
+conf_pond
+```
+
+Statistiques sur la matrice de confusion
+```{r}
+# Statistiques de performance
+results_df <- tibble(
+  truth = real_lab,
+  prediction = pred_lab
+)
+
+results_df %>%
+  yardstick::metric_set(
+    yardstick::accuracy,
+    yardstick::precision,
+    yardstick::recall,
+    yardstick::f_meas
+  )(
+    truth = truth,
+    estimate = prediction
+  ) %>%
+  print()
+```
+
+Courbe ROC
+```{r}
+# Classes de Y
+classes <- levels(test_xgboost$Y)
+
+# Noms des colonnes de probabilités
+colnames(probs) <- classes
+
+# Calcul et affichage des ROC
+roc_list <- list()
+
+for (cl in classes) {
+  
+  # Classe courante = 1, toutes les autres = 0
+  roc_df <- data.frame(
+    D = ifelse(test_xgboost$Y == cl, 1, 0),
+    M = probs[, cl]
+  )
+  
+  # Courbe ROC
+  p <- ggplot(roc_df, aes(m = M, d = D)) +
+    geom_roc(
+      color = "darkblue",
+      size = 1.2,
+      n.cuts = 0
+    ) +
+    style_roc() +
+    labs(
+      title = paste("Courbe ROC - classe", cl),
+      x = "1 - Spécificité",
+      y = "Sensibilité"
+    )
+  
+  # Calcul de l'AUC
+  roc_stats <- calc_auc(p)
+  
+  # Stocker
+  roc_list[[cl]] <- list(
+    plot = p,
+    auc = roc_stats
+  )
+  
+  # Afficher
+  print(p)
+  print(roc_stats)
+}
+```
+
+Valeurs de Shapley
+```{r}
+library(tidyr)
+library(forcats)
+
+# Classes de Y
+classes <- levels(test_xgboost$Y)
+
+# Calcul des valeurs de Shapley
+shap_values <- predict(
+  model_xgb,
+  x_test,
+  type = "contrib"
+)
+
+# Graphiques pour les 5 classes Y
+for (i in seq_along(classes)) {
+  
+  shap_class <- shap_values[, i, ]
+  
+  # Transformer en dataframe
+  shap_df <- as.data.frame(shap_class)
+  
+  # 15 variables + BIAS
+  colnames(shap_df) <- c(
+    colnames(x_test),
+    "BIAS"
+  )
+  
+  shap_df$observation <- seq_len(nrow(shap_df))
+  
+  shap_long <- shap_df %>%
+    select(-BIAS) %>%
+    pivot_longer(
+      cols = -observation,
+      names_to = "feature",
+      values_to = "shap_value"
+    )
+  
+  top_features <- shap_long %>%
+    group_by(feature) %>%
+    summarise(
+      mean_abs_shap = mean(abs(shap_value)),
+      .groups = "drop"
+    ) %>%
+    arrange(desc(mean_abs_shap)) %>%
+    slice_head(n = 10) %>% 
+    pull(feature)
+  
+  shap_top10 <- shap_long %>%
+                filter(feature %in% top_features)
+  
+  p <- ggplot(
+    shap_top10,
+    aes(
+      x = shap_value,
+      y = fct_rev(fct_inorder(feature))
+    )
+  ) +
+    geom_jitter(
+      height = 0.2,
+      alpha = 0.4
+    ) +
+    labs(
+      title = paste("Valeurs SHAP - classe", classes[i]),
+      x = "Valeur SHAP (impact sur la prédiction)",
+      y = "Variable"
+    ) +
+    theme_minimal()
+  
+  print(p)
+}
+```
+
+
+# 4. Stacking
+```{r}
+library(nnet)
+
+# Probabilités RF sur le train
+probs_rf_train <- predict(
+  modele_rf,
+  data = train_rf,
+  type = "response"
+)$predictions
+
+colnames(probs_rf_train) <- paste0(
+  "RF_",
+  make.names(colnames(probs_rf_train))
+)
+
+
+# Probabilités XGBoost sur le train
+probs_xgb_train <- predict(
+  model_xgb,
+  newdata = x_train
+)
+
+probs_xgb_train <- matrix(
+  probs_xgb_train,
+  ncol = 5,
+  byrow = TRUE
+)
+
+colnames(probs_xgb_train) <- paste0(
+  "XGB_",
+  make.names(levels(train_xgboost$Y))
+)
+
+
+meta_data_train <- data.frame(
+  probs_rf_train,
+  probs_xgb_train
+)
+
+meta_data_train$Y <- train_xgboost$Y
+
+stacking_model <- multinom(
+  Y ~ .,
+  data = meta_data_train,
+  trace = FALSE
+)
+
+stacking_model
+```
+
+Prédictions sur les données de test
+```{r}
+library(yardstick)
+
+probs_rf_test <- predict(
+  modele_rf,
+  data = test_rf,
+  type = "response"
+)$predictions
+
+colnames(probs_rf_test) <- paste0(
+  "RF_",
+  make.names(colnames(probs_rf_test))
+)
+
+
+probs_xgb_test <- predict(
+  model_xgb,
+  newdata = x_test
+)
+probs_xgb_test <- matrix(
+  probs_xgb_test,
+  ncol = 5,
+  byrow = TRUE
+)
+colnames(probs_xgb_test) <- paste0(
+  "XGB_",
+  make.names(levels(test_xgboost$Y))
+)
+
+meta_data_test <- data.frame(
+  probs_rf_test,
+  probs_xgb_test
+)
+
+meta_data_test$Y <- test_xgboost$Y
+
+probs_stack <- predict(
+  stacking_model,
+  newdata = meta_data_test,
+  type = "probs"
+)
+
+pred_stack <- factor(
+  colnames(probs_stack)[max.col(probs_stack)],
+  levels = levels(test_xgboost$Y)
+)
+
+resultats_stack <- data.frame(
+  truth = test_xgboost$Y,
+  estimate = pred_stack
+)
+yardstick::metric_set(
+  yardstick::accuracy,
+  yardstick::precision,
+  yardstick::recall,
+  yardstick::f_meas
+)(
+  data = resultats_stack,
+  truth = truth,
+  estimate = estimate
+)
+
+conf_stack <- table(
+  Prédiction = pred_stack,
+  Réel = test_xgboost$Y
+)
+
+conf_stack
+```
+
+On voit que même pour le stacking, le modèle a tendance à prédire (à tort) la classe majoritaire des "15-16 ans". Ceci est cohérent puisque c'est le cas des modèles Random Forest et XGboost, et le stacking est construit, en deux niveaux, à partir de ces deux modèles. 
