@@ -166,6 +166,7 @@ table(Y)
 ```
 
 # Imputation par Hot deck aléatoire
+On choisit une méthode d'imputation aléatoire pour ne pas casser le lien entre les variables en introduisant un lien artificiel. 
 
 ```{r}
 variables_a_imputer <- setdiff(
