@@ -835,6 +835,7 @@ for (i in seq_along(classes)) {
   print(p)
 }
 ```
+Les graphes des valeurs de Shapley sont plutôt cohérents avec les résultats précédents. On voit que le fait que les parents boivent de l'alcool à la maison a tendance à diminuer la prédiction d'être non concerné par la consommation d'alcool (donc indirectement augmenter celle d'être concerné).  
 
 
 # 4. Stacking
