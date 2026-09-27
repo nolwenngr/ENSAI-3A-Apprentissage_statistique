@@ -758,8 +758,8 @@ for (cl in classes) {
 }
 ```
 
-Contrairement au Random Forest, les courbes ROC montre que toutes les modalités de Y 
-donnent des résultats prochent du hasard pour discrimer les individus qui appartiennent réellement à leur classe.
+Contrairement au Random Forest, les courbes ROC montrent que toutes les modalités de Y 
+donnent des résultats proches du hasard pour discriminer les individus qui appartiennent réellement à leur classe.
 
 
 
