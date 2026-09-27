@@ -7,6 +7,7 @@ format: pdf
 editor: visual
 ---
 
+Les packages utilisés prennent bien en compte les poids de sondage. 
 ```{r}
 library(dplyr)
 library(tidyr)
@@ -453,6 +454,9 @@ ggplot(importance_df[1:10, ],
        theme_minimal()
 ```
 
+Le fait que les parents boivent de l'alcool à la maison a une grande importance sur l'âge de première consommation. C'est-à-dire que lorsu'on permute les informations de ces variables, la performance du modèle diminue. Donc ces variables sont particulièrement utilisées dans les prédictions du modèles.  
+
+
 Test sur l'échantillon test. 
 ```{r}
 library(caret)
@@ -473,8 +477,7 @@ confusion <- confusionMatrix(
   pred_labels,
   test_rf$Y
 )
-print(confusion)    # On voit que l'échantillon test ne contient aucun age >17
-                    # Donc aucune observation n'est prédite >17
+print(confusion)    
 
 # Matrice de confusion pondérée : 
 test_rf$pred_labels <- pred_labels
@@ -486,12 +489,9 @@ confusion_pond <- xtabs(
 )
 
 print(confusion_pond)
-# On voit qu'on a toujours aucune observation dont la classe prédite est ">17".
-# On remarque aussi que de toute manière les poids de sondage influencent très peu la distibution de Y. 
-# On remarque que c'est très souvent la classe d'âge majoritaire qui est prédite pour une observation.
-# On peut penser que ceci a un lien avec la distirbution inégale de Y. Cependant, les modèles ont été lancés avec d'autres découpages de Y offrant une répartition des âges plus équitables entre les classes, mais le même phénomène se produisait : une tendance à prédire davantage la classe majoritaire (à tort).
-
 ```
+On voit qu'on a aucune observation dont la classe prédite est ">17".
+On remarque aussi que de toute manière les poids de sondage influencent très peu la distibution des prédictions de Y. On constate que c'est très souvent la classe d'âge majoritaire qui est prédite pour une observation. On peut penser que ceci a un lien avec la distirbution inégale de Y. Cependant, les modèles ont été lancés avec d'autres découpages de Y offrant une répartition des âges plus équitables entre les classes, mais le même phénomène se produisait : une tendance à prédire davantage la classe majoritaire (à tort).
 
 
 Courbes ROC (One Versus Rest)
@@ -538,6 +538,7 @@ for (cl in classes) {
   print(roc_stats)
 }
 ```
+Les courbes ROC montre que seule la modalité "non_concerne" semble avoir une capacité légèrement discriminante entre les individus réellement non concernés par l'alcool. En revanche, les autres modalités offrent des résultats prochent du hasard. 
 
 
 
@@ -627,7 +628,7 @@ for (i in 1:nrow(param_grid)) {
     %.4f\n", best_acc))
 ```
 
-# Entrainement du modèle avec les paramètres optimaux
+Entrainement du modèle avec les paramètres optimaux
 ```{r}
 x_train <- train_xgboost %>%
   select(-Y)
@@ -654,6 +655,8 @@ importance <- xgb.importance(model = model_xgb)
 
 xgb.plot.importance(importance_matrix = importance[1:10,])
 ```
+Le XGboost montre donc par rapport au Random Forest que les PCS des parents ont aussi une importance sur la qualité prédictive du modèle.
+
 
 Prédictions du modèle sur les données test
 ```{r}
@@ -682,6 +685,8 @@ conf_pond <- xtabs(
 )
 conf_pond
 ```
+On a toujours le même constat quant à la tendance de prédire la classe majoritaire. 
+
 
 Statistiques sur la matrice de confusion
 ```{r}
@@ -703,6 +708,7 @@ results_df %>%
   ) %>%
   print()
 ```
+
 
 Courbe ROC
 ```{r}
@@ -752,6 +758,11 @@ for (cl in classes) {
 }
 ```
 
+Contrairement au Random Forest, les courbes ROC montre que toutes les modalités de Y 
+donnent des résultats prochent du hasard pour discrimer les individus qui appartiennent réellement à leur classe.
+
+
+
 Valeurs de Shapley
 ```{r}
 library(tidyr)
@@ -767,12 +778,11 @@ shap_values <- predict(
   type = "contrib"
 )
 
-# Graphiques pour les 5 classes Y
+# Graphiques pour les 5 classes de Y
 for (i in seq_along(classes)) {
   
   shap_class <- shap_values[, i, ]
   
-  # Transformer en dataframe
   shap_df <- as.data.frame(shap_class)
   
   # 15 variables + BIAS
