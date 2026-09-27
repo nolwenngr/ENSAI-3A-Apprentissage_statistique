@@ -337,8 +337,6 @@ On voit que le modèle a tendance à prédire la classe majoritaire : 15-16 ans.
 
 # 2. Forêt aléatoire
 
-# RF avec le package Ranger
-
 Choix du nombre d'arbres et de variables explicatives.
 
 ```{r}
