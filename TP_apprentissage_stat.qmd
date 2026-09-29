@@ -538,7 +538,7 @@ for (cl in classes) {
   print(roc_stats)
 }
 ```
-Les courbes ROC montre que seule la modalité "non_concerne" semble avoir une capacité légèrement discriminante entre les individus réellement non concernés par l'alcool. En revanche, les autres modalités offrent des résultats prochent du hasard. 
+Les courbes ROC montrent que seule la modalité "non_concerne" semble avoir une capacité légèrement discriminante entre les individus réellement non concernés par l'alcool. En revanche, les autres modalités offrent des résultats proches du hasard. 
 
 
 
